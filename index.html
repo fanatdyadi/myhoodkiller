@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Подстрели гейстера</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                height: 100%;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                background-color: #222;
+
+                /*height: 100vh;*/
+                color: white;
+                overflow: hidden;
+            }
+
+            #game-container {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                max-width: 1000px;
+                max-height: 100%;
+                background-color: #444;
+                background-image: url("background.png");
+                background-size: cover;
+                border-radius: 10px;
+                overflow: hidden;
+            }
+
+            #scoreboard {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 60px;
+                background-color: rgba(0, 0, 0, 0.7);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0 20px;
+                z-index: 10;
+            }
+
+            #score,
+            #lives {
+                font-size: 24px;
+                font-weight: bold;
+            }
+
+            #sound-toggle {
+                position: absolute;
+                top: 15px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 5px 10px;
+                background-color: #555;
+                border: none;
+                border-radius: 5px;
+                color: white;
+                cursor: pointer;
+            }
+
+            #sound-toggle:hover {
+                background-color: #666;
+            }
+
+            #start-screen,
+            #end-screen {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                background-color: rgba(0, 0, 0, 0.8);
+                z-index: 20;
+            }
+
+            #end-screen {
+                display: none;
+            }
+
+            #start-button,
+            #restart-button {
+                padding: 15px 30px;
+                font-size: 24px;
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                margin-top: 20px;
+            }
+
+            #start-button:hover,
+            #restart-button:hover {
+                background-color: #3e8e41;
+            }
+
+            .target {
+                position: absolute;
+                cursor: pointer;
+                transition: transform 0.1s;
+            }
+
+            .target:hover {
+                transform: scale(1.05);
+            }
+
+            #end-message {
+                font-size: 36px;
+                margin-bottom: 20px;
+                text-align: center;
+                white-space: pre-line;
+            }
+
+            .bullet-hole {
+                position: absolute;
+                width: 60px;
+                height: 60px;
+                pointer-events: none;
+                z-index: 5;
+            }
+
+            #game-title {
+                font-size: 48px;
+                margin-bottom: 20px;
+                text-shadow: 2px 2px 4px #000;
+                text-align: center;
+            }
+
+            .club-link {
+                margin-top: 50px;
+                color: white;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="game-container">
+            <div id="scoreboard">
+                <div id="score">Очки: 0</div>
+                <button id="sound-toggle">Звук: Вкл</button>
+                <div id="lives">Жизни: 3</div>
+            </div>
+
+            <div id="start-screen">
+                <h1 id="game-title">Подстрели гейстера</h1>
+                <button id="start-button">Начать</button>
+
+                <a class="club-link" href="https://t.me/My_Hui_Penis"
+                    >Фан-клуб MyHooD Recordzz</a
+                >
+            </div>
+
+            <div id="end-screen">
+                <div id="end-message"></div>
+                <button id="restart-button">Начать заново</button>
+                <a class="club-link" href="https://t.me/My_Hui_Penis"
+                    >Фан-клуб MyHooD Recordzz</a
+                >
+            </div>
+        </div>
+
+        <script>
+            // Конфигурация игры
+            const gameConfig = {
+                // Тексты
+                texts: {
+                    gameTitle: "Подстрели гейстера",
+                    startButton: "Начать",
+                    restartButton: "Начать заново",
+                    scoreText: "Очки: ",
+                    livesText: "Жизни: ",
+                    soundOnText: "Звук: Вкл",
+                    soundOffText: "Звук: Выкл",
+                    gameOverText: "Игра окончена!",
+                    finalScoreText: "Ваш счёт: ",
+                },
+
+                // Настройки игрового процесса
+                gameplay: {
+                    initialLives: 3,
+                    targetSpawnInterval: 2000, // 2 секунды
+                    initialTargetVisibilityTime: 6000, // 6 секунд
+                    minTargetVisibilityTime: 300, // 300 мс
+                    difficultyIncreaseStep: 5, // каждые 5 очков
+                    difficultyIncreaseAmount: 100, // уменьшение времени на 100 мс
+                    targetMinSize: 200,
+                    targetMaxSize: 200,
+                    bulletHoleDisplayTime: 500, // 500 мс
+                    safeZoneHeight: 70, // высота зоны без целей сверху (для счетчиков)
+                },
+
+                // Медиа-файлы
+                media: {
+                    targets: [
+                        {
+                            image: "dyadya2.png",
+                            spawnSound:
+                                "data:audio/mpeg;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMA//uSwAAABLQ/WhTxAAKSIG5DeIAARERERERERERERERERERERERERERERERERER", // Короткий placeholder для звука
+                        },
+                        {
+                            image: "julia2.png",
+                            spawnSound:
+                                "data:audio/mpeg;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMA//uSwAAABLQ/WhTxAAKSIG5DeIAARERERERERERERERERERERERERERERERERER",
+                        },
+                        {
+                            image: "nake2.png",
+                            spawnSound:
+                                "data:audio/mpeg;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMA//uSwAAABLQ/WhTxAAKSIG5DeIAARERERERERERERERERERERERERERERERERER",
+                        },
+                    ],
+                    bulletHole:
+                        "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8IS0tIExhcmdlIGNlbnRyYWwgc3BsYXR0ZXIgLS0+CiAgPHBhdGggZD0iTTQ4IDQ1IAogICAgICAgICAgIEM1NSAzNSwgNjAgNDAsIDU4IDMwIAogICAgICAgICAgIEM2NSAzNSwgNjMgMjUsIDY4IDMyCiAgICAgICAgICAgQzcyIDI1LCA3NSAzNSwgNzAgNDAKICAgICAgICAgICBDNzUgNDUsIDY1IDUwLCA2OCA1NQogICAgICAgICAgIEM2MCA2MCwgNjUgNjUsIDU1IDYyCiAgICAgICAgICAgQzUwIDY4LCA0NSA2MCwgNDggNjUKICAgICAgICAgICBDNDAgNjAsIDM1IDY4LCAzMiA2MgogICAgICAgICAgIEMyNSA2NSwgMzAgNTgsIDIyIDU1CiAgICAgICAgICAgQzI3IDUwLCAyMCA0NSwgMjggNDIKICAgICAgICAgICBDMjUgMzUsIDMyIDMwLCAzNSAzOAogICAgICAgICAgIEM0MCAzMCwgNDUgMzgsIDQyIDQ1CiAgICAgICAgICAgQzQ4IDQwLCA0MCAzNSwgNDggNDUiCiAgICAgICAgZmlsbD0iIzk5MDAwMCIgLz4KICAgICAgICAKICA8IS0tIFNjYXR0ZXJlZCBibG9vZCBkcm9wbGV0cyBvZiB2YXJpb3VzIHNpemVzIC0tPgogIDxjaXJjbGUgY3g9IjY1IiBjeT0iMjAiIHI9IjQiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuOSIgLz4KICA8Y2lyY2xlIGN4PSI3NSIgY3k9IjM1IiByPSIzIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjg1IiAvPgogIDxjaXJjbGUgY3g9IjY4IiBjeT0iNDgiIHI9IjUiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuOCIgLz4KICA8Y2lyY2xlIGN4PSI3OCIgY3k9IjU1IiByPSIyIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjkiIC8+CiAgPGNpcmNsZSBjeD0iNjUiIGN5PSI2NSIgcj0iNCIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC44NSIgLz4KICA8Y2lyY2xlIGN4PSI1NSIgY3k9Ijc1IiByPSIzIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjgiIC8+CiAgPGNpcmNsZSBjeD0iNDAiIGN5PSI4MCIgcj0iNSIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC45IiAvPgogIDxjaXJjbGUgY3g9IjI1IiBjeT0iNzUiIHI9IjMiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuODUiIC8+CiAgPGNpcmNsZSBjeD0iMTUiIGN5PSI2NSIgcj0iNCIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC44IiAvPgogIDxjaXJjbGUgY3g9IjEyIiBjeT0iNTAiIHI9IjIiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuOSIgLz4KICA8Y2lyY2xlIGN4PSIxNSIgY3k9IjM1IiByPSI0IiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjg1IiAvPgogIDxjaXJjbGUgY3g9IjI1IiBjeT0iMjAiIHI9IjMiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuOCIgLz4KICA8Y2lyY2xlIGN4PSI0MCIgY3k9IjE1IiByPSI1IiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjkiIC8+CiAgCiAgPCEtLSBNZWRpdW0gc2l6ZWQgc3BsYXR0ZXJzIC0tPgogIDxwYXRoIGQ9Ik03MyAyOCBDNzUgMjUsIDc4IDI2LCA3NyAyOSBDNzkgMzAsIDc4IDMzLCA3NSAzMiBDNzQgMzQsIDcxIDMzLCA3MyAyOCIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC44NSIgLz4KICA8cGF0aCBkPSJNMjAgMjggQzE4IDI1LCAxNSAyNiwgMTYgMjkgQzE0IDMwLCAxNSAzMywgMTggMzIgQzE5IDM0LCAyMiAzMywgMjAgMjgiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuODUiIC8+CiAgPHBhdGggZD0iTTIwIDcwIEMxOCA2NywgMTUgNjgsIDE2IDcxIEMxNCA3MiwgMTUgNzUsIDE4IDc0IEMxOSA3NiwgMjIgNzUsIDIwIDcwIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjg1IiAvPgogIDxwYXRoIGQ9Ik03MyA3MCBDNzUgNjcsIDc4IDY4LCA3NyA3MSBDNzkgNzIsIDc4IDc1LCA3NSA3NCBDNSA3NiwgNzEgNzUsIDczIDcwIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjg1IiAvPgogIAogIDwhLS0gU21hbGxlciBibG9vZCBtaXN0L3NwcmF5IHBhcnRpY2xlcyAtLT4KICA8Y2lyY2xlIGN4PSI4MCIgY3k9IjMwIiByPSIxIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iODMiIGN5PSI0MCIgcj0iMC44IiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iODIiIGN5PSI1MCIgcj0iMS4yIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iODAiIGN5PSI2MCIgcj0iMC45IiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iNzAiIGN5PSI3NSIgcj0iMS4xIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iNjAiIGN5PSI4MiIgcj0iMC44IiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iNTAiIGN5PSI4NSIgcj0iMSIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC43IiAvPgogIDxjaXJjbGUgY3g9IjQwIiBjeT0iODMiIHI9IjAuOSIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC43IiAvPgogIDxjaXJjbGUgY3g9IjMwIiBjeT0iODAiIHI9IjEuMiIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC43IiAvPgogIDxjaXJjbGUgY3g9IjIwIiBjeT0iNzUiIHI9IjAuOCIgZmlsbD0iIzk5MDAwMCIgb3BhY2l0eT0iMC43IiAvPgogIDxjaXJjbGUgY3g9IjEzIiBjeT0iNjAiIHI9IjEiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuNyIgLz4KICA8Y2lyY2xlIGN4PSIxMCIgY3k9IjUwIiByPSIwLjkiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuNyIgLz4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjQwIiByPSIxLjEiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuNyIgLz4KICA8Y2lyY2xlIGN4PSIxNSIgY3k9IjMwIiByPSIwLjgiIGZpbGw9IiM5OTAwMDAiIG9wYWNpdHk9IjAuNyIgLz4KICA8Y2lyY2xlIGN4PSIzMCIgY3k9IjE1IiByPSIxIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iNTAiIGN5PSIxMiIgcj0iMC45IiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+CiAgPGNpcmNsZSBjeD0iNzAiIGN5PSIxOCIgcj0iMS4yIiBmaWxsPSIjOTkwMDAwIiBvcGFjaXR5PSIwLjciIC8+Cjwvc3ZnPg==",
+                    sounds: {
+                        hit: "hit.mp3",
+                        miss: "data:audio/mpeg;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMA//uSwAAABLQ/WhTxAAKSIG5DeIAARERERERERERERERERERERERERERERERERER",
+                        gameOver: "gameover2.mp3",
+                        background: "background.mp3",
+                    },
+                },
+            };
+
+            // DOM-элементы
+            const gameContainer = document.getElementById("game-container");
+            const scoreElement = document.getElementById("score");
+            const livesElement = document.getElementById("lives");
+            const soundToggleButton = document.getElementById("sound-toggle");
+            const startScreen = document.getElementById("start-screen");
+            const endScreen = document.getElementById("end-screen");
+            const startButton = document.getElementById("start-button");
+            const restartButton = document.getElementById("restart-button");
+            const endMessage = document.getElementById("end-message");
+            const gameTitle = document.getElementById("game-title");
+
+            // Состояние игры
+            let gameState = {
+                score: 0,
+                lives: gameConfig.gameplay.initialLives,
+                isRunning: false,
+                targetVisibilityTime:
+                    gameConfig.gameplay.initialTargetVisibilityTime,
+                soundEnabled: true,
+                targets: [],
+                spawnInterval: null,
+                backgroundMusic: null,
+            };
+
+            // Инициализация аудио
+            function initAudio() {
+                gameState.backgroundMusic = new Audio(
+                    gameConfig.media.sounds.background
+                );
+                gameState.backgroundMusic.loop = true;
+
+                // Предзагрузка звуков
+                const hitSound = new Audio(gameConfig.media.sounds.hit);
+                const missSound = new Audio(gameConfig.media.sounds.miss);
+                const gameOverSound = new Audio(
+                    gameConfig.media.sounds.gameOver
+                );
+
+                // Предзагрузка звуков для целей
+                gameConfig.media.targets.forEach((target) => {
+                    const spawnSound = new Audio(target.spawnSound);
+                });
+            }
+
+            // Воспроизведение звука
+            function playSound(sound) {
+                if (gameState.soundEnabled) {
+                    const audio = new Audio(sound);
+                    audio
+                        .play()
+                        .catch((e) => console.log("Audio playback failed:", e));
+                }
+            }
+
+            // Обновление UI
+            function updateUI() {
+                scoreElement.textContent =
+                    gameConfig.texts.scoreText + gameState.score;
+                livesElement.textContent =
+                    gameConfig.texts.livesText + gameState.lives;
+            }
+
+            // Создание цели
+            function createTarget() {
+                if (!gameState.isRunning) return;
+
+                // Выбор случайной цели
+                const targetIndex = Math.floor(
+                    Math.random() * gameConfig.media.targets.length
+                );
+                const targetInfo = gameConfig.media.targets[targetIndex];
+
+                // Создание элемента цели
+                const target = document.createElement("div");
+                target.className = "target";
+
+                // Определение размера цели
+                const size =
+                    Math.floor(
+                        Math.random() *
+                            (gameConfig.gameplay.targetMaxSize -
+                                gameConfig.gameplay.targetMinSize +
+                                1)
+                    ) + gameConfig.gameplay.targetMinSize;
+
+                // Позиционирование цели
+                const maxX = gameContainer.clientWidth - size;
+                const maxY = gameContainer.clientHeight - size;
+                const minY = gameConfig.gameplay.safeZoneHeight; // Не допускаем появления в верхней части
+
+                const posX = Math.floor(Math.random() * maxX);
+                const posY = Math.floor(Math.random() * (maxY - minY)) + minY;
+
+                target.style.width = size + "px";
+                target.style.height = size + "px";
+                target.style.left = posX + "px";
+                target.style.top = posY + "px";
+
+                // Установка изображения цели
+                target.style.backgroundImage = `url(${targetInfo.image})`;
+                target.style.backgroundSize = "contain";
+                target.style.backgroundRepeat = "no-repeat";
+
+                // Добавление обработчика клика
+                target.addEventListener("click", (event) => {
+                    if (!gameState.isRunning) return;
+
+                    // Воспроизведение звука попадания
+                    playSound(gameConfig.media.sounds.hit);
+
+                    // Создание эффекта дырки от пули
+                    createBulletHole(event.clientX, event.clientY);
+
+                    // Увеличение счета
+                    gameState.score++;
+
+                    // Проверка на увеличение сложности
+                    if (
+                        gameState.score %
+                            gameConfig.gameplay.difficultyIncreaseStep ===
+                        0
+                    ) {
+                        increaseDifficulty();
+                    }
+
+                    // Обновление UI
+                    updateUI();
+
+                    // Отметить цель как попаданную (визуальный эффект)
+                    target.style.opacity = "0.5";
+                    target.style.pointerEvents = "none"; // Предотвращает повторные клики
+
+                    // Удаление цели через 500мс (как и bulletHole)
+                    setTimeout(() => {
+                        if (gameContainer.contains(target)) {
+                            // Удаление цели
+                            gameContainer.removeChild(target);
+
+                            // Удаление цели из массива
+                            const index = gameState.targets.indexOf(target);
+                            if (index !== -1) {
+                                gameState.targets.splice(index, 1);
+                            }
+                        }
+                    }, gameConfig.gameplay.bulletHoleDisplayTime); // Используем то же время что и для дырки от пули
+                });
+
+                // Добавление цели в контейнер и массив
+                gameContainer.appendChild(target);
+                gameState.targets.push(target);
+
+                // Воспроизведение звука появления
+                playSound(targetInfo.spawnSound);
+
+                // Установка таймера исчезновения
+                setTimeout(() => {
+                    if (gameContainer.contains(target)) {
+                        // Воспроизведение звука пропуска
+                        playSound(gameConfig.media.sounds.miss);
+
+                        // Уменьшение жизней
+                        gameState.lives--;
+
+                        // Обновление UI
+                        updateUI();
+
+                        // Удаление цели
+                        gameContainer.removeChild(target);
+
+                        // Удаление цели из массива
+                        const index = gameState.targets.indexOf(target);
+                        if (index !== -1) {
+                            gameState.targets.splice(index, 1);
+                        }
+
+                        // Проверка на конец игры
+                        if (gameState.lives <= 0) {
+                            endGame();
+                        }
+                    }
+                }, gameState.targetVisibilityTime);
+            }
+
+            // Создание эффекта дырки от пули
+            function createBulletHole(x, y) {
+                const bulletHole = document.createElement("div");
+                bulletHole.className = "bullet-hole";
+
+                // Позиционирование дырки
+                const rect = gameContainer.getBoundingClientRect();
+                bulletHole.style.left = x - rect.left - 15 + "px";
+                bulletHole.style.top = y - rect.top - 15 + "px";
+
+                // Установка изображения дырки
+                bulletHole.style.backgroundImage = `url(${gameConfig.media.bulletHole})`;
+                bulletHole.style.backgroundSize = "contain";
+
+                // Добавление дырки в контейнер
+                gameContainer.appendChild(bulletHole);
+
+                // Удаление дырки через определенное время
+                setTimeout(() => {
+                    if (gameContainer.contains(bulletHole)) {
+                        gameContainer.removeChild(bulletHole);
+                    }
+                }, gameConfig.gameplay.bulletHoleDisplayTime);
+            }
+
+            // Увеличение сложности
+            function increaseDifficulty() {
+                gameState.targetVisibilityTime = Math.max(
+                    gameState.targetVisibilityTime -
+                        gameConfig.gameplay.difficultyIncreaseAmount,
+                    gameConfig.gameplay.minTargetVisibilityTime
+                );
+            }
+
+            // Начало игры
+            function startGame() {
+                // Сброс состояния
+                gameState.score = 0;
+                gameState.lives = gameConfig.gameplay.initialLives;
+                gameState.targetVisibilityTime =
+                    gameConfig.gameplay.initialTargetVisibilityTime;
+                gameState.isRunning = true;
+
+                // Скрытие стартового экрана
+                startScreen.style.display = "none";
+                endScreen.style.display = "none";
+
+                // Обновление UI
+                updateUI();
+
+                // Запуск фоновой музыки, если она еще не играет
+                if (
+                    gameState.soundEnabled &&
+                    gameState.backgroundMusic &&
+                    (gameState.backgroundMusic.paused ||
+                        gameState.backgroundMusic.currentTime === 0)
+                ) {
+                    gameState.backgroundMusic
+                        .play()
+                        .catch((e) =>
+                            console.log("Background music playback failed:", e)
+                        );
+                }
+
+                // Запуск интервала появления целей
+                gameState.spawnInterval = setInterval(
+                    createTarget,
+                    gameConfig.gameplay.targetSpawnInterval
+                );
+            }
+
+            // Завершение игры
+            function endGame() {
+                gameState.isRunning = false;
+
+                // Остановка интервала появления целей
+                clearInterval(gameState.spawnInterval);
+
+                // Воспроизведение звука окончания игры
+                playSound(gameConfig.media.sounds.gameOver);
+
+                // Отображение экрана окончания
+                endMessage.textContent = `${gameConfig.texts.gameOverText}\n${gameConfig.texts.finalScoreText}${gameState.score}`;
+                endScreen.style.display = "flex";
+
+                // Удаление всех целей
+                gameState.targets.forEach((target) => {
+                    if (gameContainer.contains(target)) {
+                        gameContainer.removeChild(target);
+                    }
+                });
+                gameState.targets = [];
+
+                // Фоновая музыка продолжает играть
+            }
+
+            // Обработчики событий
+            startButton.addEventListener("click", startGame);
+            restartButton.addEventListener("click", startGame);
+
+            soundToggleButton.addEventListener("click", () => {
+                gameState.soundEnabled = !gameState.soundEnabled;
+                soundToggleButton.textContent = gameState.soundEnabled
+                    ? gameConfig.texts.soundOnText
+                    : gameConfig.texts.soundOffText;
+
+                if (gameState.backgroundMusic) {
+                    if (gameState.soundEnabled) {
+                        gameState.backgroundMusic
+                            .play()
+                            .catch((e) =>
+                                console.log(
+                                    "Background music playback failed:",
+                                    e
+                                )
+                            );
+                    } else {
+                        gameState.backgroundMusic.pause();
+                    }
+                }
+            });
+
+            // Инициализация игры
+            function initGame() {
+                // Установка текстов
+                gameTitle.textContent = gameConfig.texts.gameTitle;
+                startButton.textContent = gameConfig.texts.startButton;
+                restartButton.textContent = gameConfig.texts.restartButton;
+                scoreElement.textContent = gameConfig.texts.scoreText + "0";
+                livesElement.textContent =
+                    gameConfig.texts.livesText +
+                    gameConfig.gameplay.initialLives;
+                soundToggleButton.textContent = gameConfig.texts.soundOnText;
+
+                // Инициализация аудио
+                initAudio();
+            }
+
+            // Запуск инициализации
+            window.addEventListener("load", initGame);
+        </script>
+    </body>
+</html>
